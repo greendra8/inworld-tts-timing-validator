@@ -8,7 +8,7 @@ It catches common glitch patterns from timestamp metadata (no audio decoding nee
 - suspicious opening-word pause pattern
 - compressed/truncated pacing spikes
 
-This implementation was tuned from real labeled production samples and is designed to run on hundreds of segments in seconds.
+This implementation was tuned from real labeled samples and is designed to run on hundreds of segments in seconds.
 
 ## Why this exists
 
@@ -50,9 +50,9 @@ if not result.is_valid:
 
 ## Included dataset
 
-This repo includes a curated safe-for-work dataset:
+This repo includes a curated dataset:
 
-- `datasets/sfw_validation_failures.json`
+- `datasets/validation_failures.json`
 
 It contains labeled fail examples with:
 - voice/model metadata (`voice_id`, `model_id`, `temperature`, `speaking_rate`)

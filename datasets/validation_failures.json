@@ -1,9 +1,9 @@
 {
-  "dataset_name": "sfw_validation_failures",
+  "dataset_name": "validation_failures",
   "version": "2026-03-13",
-  "description": "Safe-for-work examples of timing-validation failures from staging and production labels.",
+  "description": "Curated timing-validation failure examples from reviewed labels.",
   "fields": [
-    "source_env",
+    "source_bucket",
     "sample_id",
     "failure_type",
     "provider",
@@ -21,7 +21,6 @@
   ],
   "samples": [
     {
-      "source_env": "prod",
       "sample_id": "d6bef528-be89-4590-a343-62cc3f2619b4",
       "failure_type": "repeated_words_or_pause_loop",
       "provider": "inworld",
@@ -29,16 +28,16 @@
       "model_id": "inworld-tts-1.5-mini",
       "temperature": 0.6,
       "speaking_rate": 0.9,
-      "content_type": "hypnosis",
+      "content_type": "wellness_script",
       "prompt_excerpt": "Nine... a little more settled... a little less effort... just listening.",
       "validation_reason": "Gap too large: 7.56s between 'settled' and 'a' (word 5 of 11) (expected break ~1.00s)",
       "max_word_duration": 0.89,
       "median_word_duration": 0.4,
       "max_word_ratio": 2.225,
-      "max_gap": 7.56
+      "max_gap": 7.56,
+      "source_bucket": "bucket_a"
     },
     {
-      "source_env": "prod",
       "sample_id": "230eed3a-4cd3-4ac9-b42a-275f1b35c542",
       "failure_type": "repeated_words_or_pause_loop",
       "provider": "inworld",
@@ -46,16 +45,16 @@
       "model_id": "inworld-tts-1.5-mini",
       "temperature": 0.6,
       "speaking_rate": 0.9,
-      "content_type": "hypnosis",
+      "content_type": "wellness_script",
       "prompt_excerpt": "Ten... beginning that easy descent... noticing the floor beneath you... and the breath within you.",
       "validation_reason": "Gap too large: 12.80s between 'Ten' and 'beginning' (word 1 of 15) (expected break ~1.00s)",
       "max_word_duration": 0.88,
       "median_word_duration": 0.38,
       "max_word_ratio": 2.316,
-      "max_gap": 12.8
+      "max_gap": 12.8,
+      "source_bucket": "bucket_a"
     },
     {
-      "source_env": "prod",
       "sample_id": "54de21de-cee0-4260-b865-bc6289fe248f",
       "failure_type": "repeated_words_or_pause_loop",
       "provider": "inworld",
@@ -63,16 +62,16 @@
       "model_id": "inworld-tts-1.5-mini",
       "temperature": 0.6,
       "speaking_rate": 0.9,
-      "content_type": "hypnosis",
+      "content_type": "wellness_script",
       "prompt_excerpt": "And because it is delayed... it can become richer... fuller... more total when it finally comes.",
       "validation_reason": "Gap too large: 14.03s between 'richer' and 'fuller' (word 9 of 16) (expected break ~1.00s)",
       "max_word_duration": 1.43,
       "median_word_duration": 0.505,
       "max_word_ratio": 2.832,
-      "max_gap": 14.03
+      "max_gap": 14.03,
+      "source_bucket": "bucket_a"
     },
     {
-      "source_env": "prod",
       "sample_id": "a91d81a2-5ba2-4422-bb39-99cf01d2830b",
       "failure_type": "repeated_words_or_pause_loop",
       "provider": "inworld",
@@ -80,16 +79,16 @@
       "model_id": "inworld-tts-1.5-mini",
       "temperature": 0.6,
       "speaking_rate": 0.9,
-      "content_type": "hypnosis",
+      "content_type": "wellness_script",
       "prompt_excerpt": "One... beginning to return... noticing the room around you... the floor beneath you.",
       "validation_reason": "Gap too large: 4.09s between 'One' and 'beginning' (word 1 of 13) (expected break ~1.00s)",
       "max_word_duration": 1.39,
       "median_word_duration": 0.47,
       "max_word_ratio": 2.957,
-      "max_gap": 4.09
+      "max_gap": 4.09,
+      "source_bucket": "bucket_a"
     },
     {
-      "source_env": "staging",
       "sample_id": "e55dcc7b-0ba8-409d-a0cf-a2b9be596483",
       "failure_type": "repeated_words_or_pause_loop",
       "provider": "inworld",
@@ -97,16 +96,16 @@
       "model_id": "inworld-tts-1.5-mini",
       "temperature": 0.6,
       "speaking_rate": 0.9,
-      "content_type": "hypnosis",
+      "content_type": "wellness_script",
       "prompt_excerpt": "Your body knows many things without supervision... and perhaps sleep belongs to that same natural intelligence.",
       "validation_reason": "Gap too large: 5.90s between 'intelligence' and 'than' (word 30 of 33) (expected break ~1.00s)",
       "max_word_duration": 1.14,
       "median_word_duration": 0.45,
       "max_word_ratio": 2.533,
-      "max_gap": 5.9
+      "max_gap": 5.9,
+      "source_bucket": "bucket_b"
     },
     {
-      "source_env": "staging",
       "sample_id": "e4e7e34e-4ebf-4b77-b19e-05f0bf186e6a",
       "failure_type": "repeated_words_or_pause_loop",
       "provider": "inworld",
@@ -114,16 +113,16 @@
       "model_id": "inworld-tts-1.5-mini",
       "temperature": 0.6,
       "speaking_rate": 0.9,
-      "content_type": "hypnosis",
+      "content_type": "wellness_script",
       "prompt_excerpt": "Imagine a simple staircase leading down into calm... not making sleep happen... just carrying less pressure.",
       "validation_reason": "Gap too large: 5.34s between 'night' and 'just' (word 26 of 35)",
       "max_word_duration": 1.2,
       "median_word_duration": 0.5,
       "max_word_ratio": 2.4,
-      "max_gap": 5.34
+      "max_gap": 5.34,
+      "source_bucket": "bucket_b"
     },
     {
-      "source_env": "prod",
       "sample_id": "5b80bd3b-7d1f-4d29-9a4a-26c6122196c6",
       "failure_type": "dragged_out_characters",
       "provider": "inworld",
@@ -131,16 +130,16 @@
       "model_id": "inworld-tts-1.5-mini",
       "temperature": 0.6,
       "speaking_rate": 0.9,
-      "content_type": "hypnosis",
+      "content_type": "wellness_script",
       "prompt_excerpt": "Relaxing the neck, shoulders, and arms all the way down through the forearms and fingertips.",
       "validation_reason": "Break-boundary duration anomaly: 'forearms' lasts 2.26s (4.2x local median 0.54s) before expected break ~1.00s",
       "max_word_duration": 2.26,
       "median_word_duration": 0.46,
       "max_word_ratio": 4.913,
-      "max_gap": 1.35
+      "max_gap": 1.35,
+      "source_bucket": "bucket_a"
     },
     {
-      "source_env": "prod",
       "sample_id": "02b494ca-b990-482c-b3f5-1f9cea9b1728",
       "failure_type": "dragged_out_characters",
       "provider": "inworld",
@@ -148,16 +147,16 @@
       "model_id": "inworld-tts-1.5-mini",
       "temperature": 0.6,
       "speaking_rate": 0.9,
-      "content_type": "hypnosis",
+      "content_type": "wellness_script",
       "prompt_excerpt": "Notice the sounds around you... and all of these can remind you your body prefers clear air.",
       "validation_reason": "Break-boundary duration anomaly: 'air' lasts 1.44s (3.5x local median 0.41s) before expected break ~1.00s",
       "max_word_duration": 1.44,
       "median_word_duration": 0.385,
       "max_word_ratio": 3.74,
-      "max_gap": 1.29
+      "max_gap": 1.29,
+      "source_bucket": "bucket_a"
     },
     {
-      "source_env": "staging",
       "sample_id": "18e8a9b4-d681-4a83-bf85-a666f650f652",
       "failure_type": "dragged_out_characters",
       "provider": "inworld",
@@ -165,16 +164,16 @@
       "model_id": "inworld-tts-1.5-mini",
       "temperature": 0.6,
       "speaking_rate": 0.9,
-      "content_type": "hypnosis",
+      "content_type": "wellness_script",
       "prompt_excerpt": "Two... becoming more aware of your body... perhaps wiggling your fingers or toes.",
       "validation_reason": "Break-boundary duration anomaly: 'Two' lasts 2.49s (6.2x local median 0.40s) before expected break ~1.00s",
       "max_word_duration": 2.49,
       "median_word_duration": 0.6,
       "max_word_ratio": 4.15,
-      "max_gap": 2.45
+      "max_gap": 2.45,
+      "source_bucket": "bucket_b"
     },
     {
-      "source_env": "staging",
       "sample_id": "dd9d9692-f87c-43c3-9c1f-4f224f8d14be",
       "failure_type": "dragged_out_characters",
       "provider": "inworld",
@@ -182,16 +181,16 @@
       "model_id": "inworld-tts-1.5-mini",
       "temperature": 0.6,
       "speaking_rate": 0.9,
-      "content_type": "hypnosis",
+      "content_type": "wellness_script",
       "prompt_excerpt": "I do not have to force sleep... I can allow rest first... and that feels believable.",
       "validation_reason": "Break-boundary duration anomaly: 'sleep' lasts 2.44s (6.2x local median 0.40s) before expected break ~1.00s",
       "max_word_duration": 2.44,
       "median_word_duration": 0.41,
       "max_word_ratio": 5.951,
-      "max_gap": 3.04
+      "max_gap": 3.04,
+      "source_bucket": "bucket_b"
     },
     {
-      "source_env": "staging",
       "sample_id": "beaeeab6-7725-4451-9103-82f9b5cd4669",
       "failure_type": "dragged_out_characters",
       "provider": "inworld",
@@ -199,14 +198,14 @@
       "model_id": "inworld-tts-1.5-mini",
       "temperature": 0.6,
       "speaking_rate": 0.9,
-      "content_type": "hypnosis",
+      "content_type": "wellness_script",
       "prompt_excerpt": "Two... body softer... mind quieter... and perhaps less interested in working so hard.",
       "validation_reason": "Break-boundary duration anomaly: 'Two' lasts 2.98s (4.0x local median 0.75s) before expected break ~1.00s",
       "max_word_duration": 2.98,
       "median_word_duration": 0.57,
       "max_word_ratio": 5.228,
-      "max_gap": 2.3
+      "max_gap": 2.3,
+      "source_bucket": "bucket_b"
     }
   ]
 }
-
