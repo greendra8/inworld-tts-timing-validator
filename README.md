@@ -48,6 +48,18 @@ if not result.is_valid:
     print("retry tts:", result.reason)
 ```
 
+## Included dataset
+
+This repo includes a curated safe-for-work dataset:
+
+- `datasets/sfw_validation_failures.json`
+
+It contains labeled fail examples with:
+- voice/model metadata (`voice_id`, `model_id`, `temperature`, `speaking_rate`)
+- prompt excerpts
+- failure category (`repeated_words_or_pause_loop`, `dragged_out_characters`)
+- timing metrics (`max_gap`, `max_word_duration`, `max_word_ratio`)
+
 ## Config knobs
 
 All thresholds live in `ValidationConfig`:
