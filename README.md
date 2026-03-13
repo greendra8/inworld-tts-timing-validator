@@ -32,11 +32,7 @@ This reduced false positives on our labeled set while keeping bad-sample recall 
 
 ## Measured results on labeled data
 
-The numbers below compare:
-- **Baseline**: original pause-heavy rule set
-- **Improved rule**: severity-gated pause checks used in this repo
-
-Improved rule:
+Implemented rule in this repo:
 
 ```text
 max_word_duration >= 1.4
@@ -44,10 +40,10 @@ OR
 (max_gap >= 3.0 AND max_word_duration / median_word_duration >= 2.0)
 ```
 
-| Dataset | Labels (bad/pass) | Baseline precision (bad) | Baseline recall (bad) | Improved precision (bad) | Improved recall (bad) |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Set A | 36 (11 / 25) | 0.440 | 1.000 | 0.478 | 1.000 |
-| Set B | 26 (10 / 16) | 0.526 | 1.000 | 0.588 | 1.000 |
+| Dataset | Labels (bad/pass) | Precision (bad) | Recall (bad) |
+| --- | ---: | ---: | ---: |
+| Set A | 36 (11 / 25) | 0.478 | 1.000 |
+| Set B | 26 (10 / 16) | 0.588 | 1.000 |
 
 These sets are the reviewed samples used during threshold calibration.
 
