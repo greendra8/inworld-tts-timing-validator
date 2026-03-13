@@ -80,6 +80,7 @@ def validate_inworld_timestamps(
     source_text: str | None = None,
     config: ValidationConfig = ValidationConfig(),
 ) -> ValidationResult:
+    """Validate Inworld word timing metadata and return pass/fail with reason."""
     if not timestamp_info:
         return ValidationResult(True, "No timestamp info provided")
 
@@ -97,6 +98,8 @@ def validate_inworld_timestamps(
         )
 
     count = len(words)
+
+    # Segment-level summary stats used by both checks and the severity gate.
     word_durations = [max(float(ends[i]) - float(starts[i]), 0.0) for i in range(count)]
     positive_word_durations = [d for d in word_durations if d > 0]
     median_word_duration = median(positive_word_durations) if positive_word_durations else 0.0
@@ -105,6 +108,9 @@ def validate_inworld_timestamps(
     gap_values = [float(starts[i + 1]) - float(ends[i]) for i in range(count - 1)]
     max_gap_observed = max(gap_values) if gap_values else 0.0
 
+    # Pause-related checks (gap/break/initial-gap) are only enforced when the
+    # overall segment looks structurally anomalous. This sharply reduces natural
+    # pause false positives.
     enforce_pause_anomaly_failure = (
         max_word_duration >= config.anomaly_min_max_word_seconds
         or (
@@ -118,6 +124,7 @@ def validate_inworld_timestamps(
     break_boundaries: list[tuple[int, float]] = []
     sentence_endings = (".", "!", "?")
 
+    # 1) Gap check with sentence-aware thresholds and optional break allowances.
     for i in range(count - 1):
         gap = float(starts[i + 1]) - float(ends[i])
         prev_word = words[i]
@@ -148,6 +155,8 @@ def validate_inworld_timestamps(
                 f"(word {i+1} of {count}){context}{break_context}",
             )
 
+    # 2) If a break is expected, check that the pre-break word duration is not
+    # an extreme outlier versus local neighbors.
     for boundary_index, expected_break in break_boundaries:
         boundary_word_duration = float(ends[boundary_index]) - float(starts[boundary_index])
         if boundary_word_duration < config.break_word_min_seconds:
@@ -178,6 +187,8 @@ def validate_inworld_timestamps(
                 f"{local_median:.2f}s) before expected break ~{expected_break:.2f}s",
             )
 
+    # 3) Special case near the opening boundary: catches hidden repeated opener
+    # patterns that manifest as a suspicious first gap.
     if not break_boundaries and count >= 2 and not words[0].endswith((",", ".", "!", "?", ";", ":")):
         first_gap = float(starts[1]) - float(ends[0])
         if first_gap > config.initial_gap_no_break_seconds:
@@ -206,6 +217,8 @@ def validate_inworld_timestamps(
                         f"delta {delta:.2f}s)",
                     )
 
+    # 4) WPS spike check remains independent of the pause severity gate so that
+    # compressed/truncated pacing anomalies are still caught.
     if count >= config.window_size:
         total_duration = float(ends[-1]) - float(starts[0])
         if total_duration <= 0:
@@ -245,4 +258,3 @@ def validate_inworld_timestamps(
             "max_gap_observed": max_gap_observed,
         },
     )
-

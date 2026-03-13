@@ -18,7 +18,7 @@ Timing metadata (`wordAlignment`) is cheap to validate and gives a good first-pa
 
 ## What is the core improvement?
 
-Many pause-related false positives come from natural meditation pacing.
+Many pause-related false positives come from natural speaking pauses.
 
 So pause-family failures (gap/break/initial-gap) are only enforced when a segment-level severity gate is met:
 
@@ -68,7 +68,7 @@ All thresholds live in `ValidationConfig`:
 4. Sample and label both passing and failing outputs weekly.
 5. Re-tune thresholds by provider/voice/content-type if needed.
 
-## Costs and benefits (honest version)
+## Costs and benefits
 
 ### Benefits
 
@@ -82,8 +82,3 @@ All thresholds live in `ValidationConfig`:
 - **Not universal**: thresholds can drift by voice/model/content style.
 - **Timing-only blind spots**: some audio defects need waveform checks.
 - **Trade-off remains**: improving precision can reduce recall if over-tuned.
-
-## Recommendation
-
-Use this as a lightweight first-stage filter, then optionally add waveform-end checks for truncation and a small manual-review stream for borderline cases.
-
