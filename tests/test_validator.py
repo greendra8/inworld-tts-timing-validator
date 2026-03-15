@@ -15,32 +15,20 @@ def test_mismatched_arrays_fail():
     assert "Mismatched array lengths" in result.reason
 
 
-def test_moderate_gap_can_pass_due_to_severity_gate():
+def test_short_segment_rule_fails():
     timestamp_info = {
         "wordAlignment": {
-            "words": ["Breathe", "in", "slowly", "Breathe", "out", "slowly"],
-            "wordStartTimeSeconds": [0.0, 0.45, 0.75, 3.55, 3.95, 4.25],
-            "wordEndTimeSeconds": [0.35, 0.65, 1.05, 3.85, 4.15, 4.55],
+            "words": ["one", "more", "time", "now"],
+            "wordStartTimeSeconds": [0.0, 1.1, 2.2, 3.1],
+            "wordEndTimeSeconds": [0.3, 1.4, 2.5, 3.4],
         }
     }
-
     result = validate_inworld_timestamps(timestamp_info)
-    assert result.is_valid is True
-
-    # Optional strict mode: disable the severity gate and this shape fails.
-    strict = validate_inworld_timestamps(
-        timestamp_info,
-        config=ValidationConfig(
-            anomaly_min_max_word_seconds=0.0,
-            anomaly_min_gap_seconds=0.0,
-            anomaly_min_word_ratio=0.0,
-        ),
-    )
-    assert strict.is_valid is False
-    assert "Gap too large" in strict.reason
+    assert result.is_valid is False
+    assert "short segment risk" in result.reason
 
 
-def test_severe_gap_still_fails():
+def test_strong_gap_profile_fails():
     timestamp_info = {
         "wordAlignment": {
             "words": ["Breathe", "in", "slowly", "Breathe", "out", "slowly"],
@@ -48,35 +36,87 @@ def test_severe_gap_still_fails():
             "wordEndTimeSeconds": [2.2, 2.8, 3.1, 8.0, 8.3, 8.7],
         }
     }
-    result = validate_inworld_timestamps(
-        timestamp_info,
-        source_text='Breathe in slowly <break time="1s" /> Breathe out slowly.',
-    )
+    result = validate_inworld_timestamps(timestamp_info)
     assert result.is_valid is False
-    assert "Gap too large" in result.reason
+    assert "Gap profile risk" in result.reason
 
 
-def test_wps_spike_still_fails():
+def test_dense_break_moderate_gap_rule_fails():
+    words = [f"w{i}" for i in range(20)]
+    starts = []
+    ends = []
+    t = 0.0
+    for i in range(20):
+        starts.append(round(t, 2))
+        ends.append(round(t + 0.25, 2))
+        t += 0.25
+        if i == 8:
+            t += 3.2
+
     timestamp_info = {
         "wordAlignment": {
-            "words": [
-                "If", "you", "lose", "count,", "just", "begin", "again", "at", "one.",
-                "If", "you", "lose", "count,", "just", "begin", "again", "at", "one.",
-                "This", "is", "the", "end", "of", "the", "audio."
-            ],
-            "wordStartTimeSeconds": [
-                0, 0.201, 0.422, 0.723, 1.447, 2.029, 2.391, 2.692, 2.994,
-                3.154, 3.697, 3.898, 4.199, 4.902, 5.445, 5.847, 6.007, 6.068,
-                6.168, 6.269, 6.329, 6.409, 6.49, 6.55, 6.63
-            ],
-            "wordEndTimeSeconds": [
-                0.161, 0.362, 0.643, 1.065, 1.788, 2.331, 2.652, 2.793, 3.114,
-                3.677, 3.858, 4.119, 4.541, 5.224, 5.766, 5.987, 6.048, 6.148,
-                6.248, 6.309, 6.389, 6.469, 6.53, 6.61, 6.751
-            ],
+            "words": words,
+            "wordStartTimeSeconds": starts,
+            "wordEndTimeSeconds": ends,
+        }
+    }
+    source_text = " ".join([f"w{i}<break time=\"600ms\" />" for i in range(12)])
+    result = validate_inworld_timestamps(timestamp_info, source_text=source_text)
+    assert result.is_valid is False
+    assert "Structured-break gap risk" in result.reason
+
+
+def test_medium_band_rule_fails():
+    n = 60
+    words = [f"m{i}" for i in range(n)]
+    starts = []
+    ends = []
+    t = 0.0
+    for _ in range(n):
+        starts.append(round(t, 2))
+        ends.append(round(t + 0.2, 2))
+        t += 0.55
+    for j in range(21, n):
+        starts[j] += 2.55
+        ends[j] += 2.55
+
+    timestamp_info = {
+        "wordAlignment": {
+            "words": words,
+            "wordStartTimeSeconds": starts,
+            "wordEndTimeSeconds": ends,
+        }
+    }
+    source_text = " ".join([f"m{i}<break time=\"600ms\" />" for i in range(10)])
+    result = validate_inworld_timestamps(timestamp_info, source_text=source_text)
+    assert result.is_valid is False
+    assert "Medium-band pacing risk" in result.reason
+
+
+def test_normal_segment_passes():
+    timestamp_info = {
+        "wordAlignment": {
+            "words": ["That", "is", "a", "steady", "gentle", "breath", "now", "continue", "softly", "here", "and", "settle"],
+            "wordStartTimeSeconds": [0.0, 0.6, 1.1, 1.6, 2.1, 2.6, 3.1, 3.6, 4.1, 4.6, 5.1, 5.6],
+            "wordEndTimeSeconds": [0.3, 0.9, 1.4, 1.9, 2.4, 2.9, 3.4, 3.9, 4.4, 4.9, 5.4, 5.9],
         }
     }
     result = validate_inworld_timestamps(timestamp_info)
-    assert result.is_valid is False
-    assert "WPS spike" in result.reason
+    assert result.is_valid is True
+    assert result.reason == "Valid"
 
+
+def test_config_override_works_for_short_segment_threshold():
+    timestamp_info = {
+        "wordAlignment": {
+            "words": ["one", "more", "time", "now"],
+            "wordStartTimeSeconds": [0.0, 1.1, 2.2, 3.1],
+            "wordEndTimeSeconds": [0.3, 1.4, 2.5, 3.4],
+        }
+    }
+    # Default should fail (short segment). Raising threshold lower should allow pass.
+    strict = validate_inworld_timestamps(
+        timestamp_info,
+        config=ValidationConfig(short_segment_max_seconds=2.0),
+    )
+    assert strict.is_valid is True

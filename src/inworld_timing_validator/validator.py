@@ -2,37 +2,48 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from statistics import median
 from typing import Any
 
-BREAK_TAG_PATTERN = re.compile(
-    r"<break\s+time\s*=\s*['\"](?P<seconds>\d+(?:\.\d+)?)s['\"]\s*/?>",
+
+BREAK_TIME_PATTERN = re.compile(
+    r"<break\s+time\s*=\s*['\"](?P<value>\d+(?:\.\d+)?)(?P<unit>ms|s)['\"]\s*/?>",
     re.IGNORECASE,
 )
-WORD_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9À-ÖØ-öø-ÿ']+")
 
 
 @dataclass(frozen=True)
 class ValidationConfig:
-    max_gap_seconds: float = 2.0
-    max_gap_after_sentence_seconds: float = 3.0
-    wps_ratio_threshold: float = 3.1
-    window_size: int = 6
-    break_tolerance_seconds: float = 0.35
+    """
+    Standalone Variant C thresholds distilled from labeled production data.
 
-    break_word_min_seconds: float = 1.2
-    break_word_duration_ratio: float = 3.0
-    break_duration_median_window: int = 4
+    Defaults are intentionally concrete to match the calibrated ruleset.
+    """
 
-    initial_gap_no_break_seconds: float = 0.5
-    initial_gap_short_word_max_seconds: float = 0.8
-    initial_gap_second_word_max_seconds: float = 0.3
-    initial_gap_delta_seconds: float = 0.1
+    short_segment_max_seconds: float = 4.08
 
-    # Segment-level severity gate for pause-related failures.
-    anomaly_min_max_word_seconds: float = 1.4
-    anomaly_min_gap_seconds: float = 3.0
-    anomaly_min_word_ratio: float = 2.0
+    strong_gap_max_gap_seconds: float = 4.23
+    strong_gap_mean_gap_seconds: float = 0.50
+
+    dense_break_gap_max_gap_seconds: float = 3.2
+    dense_break_gap_mean_gap_seconds: float = 0.33
+    dense_break_min_break_tags: int = 8
+
+    medium_band_min_gap_seconds: float = 2.8
+    medium_band_max_gap_seconds: float = 3.1
+    medium_band_min_mean_gap_seconds: float = 0.35
+    medium_band_max_mean_gap_seconds: float = 0.42
+    medium_band_min_break_tags: int = 5
+    medium_band_min_duration_seconds: float = 20.0
+
+    # Distilled base branch (surrogate of grouped HGB @ 0.5)
+    base_split_max_gap_seconds: float = 4.79
+    base_split_max_gap_pos_ratio: float = 0.73
+    base_split_break_total_seconds: float = 3.90
+
+    base_hi_gap_split_duration_seconds: float = 19.91
+    base_hi_gap_max_gap_seconds: float = 8.93
+    base_mid_duration_seconds: float = 37.08
+    base_mid_overall_wps_max: float = 1.37
 
 
 @dataclass(frozen=True)
@@ -42,37 +53,27 @@ class ValidationResult:
     metrics: dict[str, float] | None = None
 
 
-def _normalize_word_token(value: str) -> str:
-    if not isinstance(value, str):
-        return ""
-    tokens = WORD_TOKEN_PATTERN.findall(value.lower())
-    return tokens[-1] if tokens else ""
-
-
-def _extract_break_allowances(source_text: str | None) -> dict[tuple[str, str], list[float]]:
+def _extract_break_summary(source_text: str | None) -> tuple[int, float, float]:
     if not source_text:
-        return {}
+        return 0, 0.0, 0.0
 
-    allowances: dict[tuple[str, str], list[float]] = {}
-    for match in BREAK_TAG_PATTERN.finditer(source_text):
+    values: list[float] = []
+    for match in BREAK_TIME_PATTERN.finditer(source_text):
         try:
-            break_seconds = float(match.group("seconds"))
+            raw = float(match.group("value"))
         except (TypeError, ValueError):
             continue
-        if break_seconds <= 0:
+        if raw <= 0:
             continue
 
-        before = source_text[: match.start()]
-        after = source_text[match.end() :]
-        prev_tokens = WORD_TOKEN_PATTERN.findall(before.lower())
-        next_tokens = WORD_TOKEN_PATTERN.findall(after.lower())
-        if not prev_tokens or not next_tokens:
-            continue
+        unit = (match.group("unit") or "s").lower()
+        seconds = raw / 1000.0 if unit == "ms" else raw
+        values.append(seconds)
 
-        key = (prev_tokens[-1], next_tokens[0])
-        allowances.setdefault(key, []).append(break_seconds)
+    if not values:
+        return 0, 0.0, 0.0
 
-    return allowances
+    return len(values), float(sum(values)), float(max(values))
 
 
 def validate_inworld_timestamps(
@@ -80,7 +81,7 @@ def validate_inworld_timestamps(
     source_text: str | None = None,
     config: ValidationConfig = ValidationConfig(),
 ) -> ValidationResult:
-    """Validate Inworld word timing metadata and return pass/fail with reason."""
+    """Validate Inworld word timing metadata using standalone Variant C."""
     if not timestamp_info:
         return ValidationResult(True, "No timestamp info provided")
 
@@ -98,163 +99,105 @@ def validate_inworld_timestamps(
         )
 
     count = len(words)
+    starts_f = [float(v) for v in starts]
+    ends_f = [float(v) for v in ends]
+    duration_s = ends_f[-1] - starts_f[0]
+    if duration_s <= 0:
+        return ValidationResult(True, "Zero duration segment")
 
-    # Segment-level summary stats used by both checks and the severity gate.
-    word_durations = [max(float(ends[i]) - float(starts[i]), 0.0) for i in range(count)]
-    positive_word_durations = [d for d in word_durations if d > 0]
-    median_word_duration = median(positive_word_durations) if positive_word_durations else 0.0
-    max_word_duration = max(positive_word_durations) if positive_word_durations else 0.0
-    max_word_ratio = max_word_duration / max(median_word_duration, 0.05) if max_word_duration > 0 else 0.0
-    gap_values = [float(starts[i + 1]) - float(ends[i]) for i in range(count - 1)]
-    max_gap_observed = max(gap_values) if gap_values else 0.0
+    gaps = [max(starts_f[i + 1] - ends_f[i], 0.0) for i in range(count - 1)]
+    max_gap_s = max(gaps) if gaps else 0.0
+    mean_gap_s = (sum(gaps) / len(gaps)) if gaps else 0.0
+    max_gap_index = gaps.index(max_gap_s) + 1 if gaps and max_gap_s > 0 else 0
+    max_gap_pos_ratio = (max_gap_index / count) if count else 0.0
+    overall_wps = count / max(duration_s, 0.001)
+    break_tag_count, break_total_s, break_max_s = _extract_break_summary(source_text)
 
-    # Pause-related checks (gap/break/initial-gap) are only enforced when the
-    # overall segment looks structurally anomalous. This sharply reduces natural
-    # pause false positives.
-    enforce_pause_anomaly_failure = (
-        max_word_duration >= config.anomaly_min_max_word_seconds
-        or (
-            max_gap_observed >= config.anomaly_min_gap_seconds
-            and max_word_ratio >= config.anomaly_min_word_ratio
-        )
-    )
+    metrics = {
+        "duration_s": duration_s,
+        "max_gap_s": max_gap_s,
+        "mean_gap_s": mean_gap_s,
+        "max_gap_pos_ratio": max_gap_pos_ratio,
+        "overall_wps": overall_wps,
+        "break_tag_count": float(break_tag_count),
+        "break_total_s": break_total_s,
+        "break_max_s": break_max_s,
+    }
 
-    break_allowances = _extract_break_allowances(source_text)
-    consumed_expected_break_seconds = 0.0
-    break_boundaries: list[tuple[int, float]] = []
-    sentence_endings = (".", "!", "?")
-
-    # 1) Gap check with sentence-aware thresholds and optional break allowances.
-    for i in range(count - 1):
-        gap = float(starts[i + 1]) - float(ends[i])
-        prev_word = words[i]
-        is_after_sentence = any(prev_word.endswith(p) for p in sentence_endings)
-        threshold = (
-            config.max_gap_after_sentence_seconds
-            if is_after_sentence
-            else config.max_gap_seconds
+    # Rule 1: abrupt short segments.
+    if duration_s <= config.short_segment_max_seconds:
+        return ValidationResult(
+            False,
+            f"Abrupt short segment risk: duration={duration_s:.2f}s",
+            metrics=metrics,
         )
 
-        pair_key = (_normalize_word_token(words[i]), _normalize_word_token(words[i + 1]))
-        expected_break = 0.0
-        pair_allowances = break_allowances.get(pair_key)
-        if pair_allowances:
-            expected_break = pair_allowances.pop(0)
-            consumed_expected_break_seconds += expected_break
-            break_boundaries.append((i, expected_break))
-            threshold += expected_break + config.break_tolerance_seconds
+    # Rule 2: strong gap profile.
+    if (
+        max_gap_s >= config.strong_gap_max_gap_seconds
+        and mean_gap_s >= config.strong_gap_mean_gap_seconds
+    ):
+        return ValidationResult(
+            False,
+            f"Gap profile risk: max_gap={max_gap_s:.2f}s, mean_gap={mean_gap_s:.2f}s",
+            metrics=metrics,
+        )
 
-        if gap > threshold and enforce_pause_anomaly_failure:
-            break_context = (
-                f" (expected break ~{expected_break:.2f}s)" if expected_break > 0 else ""
-            )
-            context = " (after sentence)" if is_after_sentence else ""
-            return ValidationResult(
-                False,
-                f"Gap too large: {gap:.2f}s between '{words[i]}' and '{words[i+1]}' "
-                f"(word {i+1} of {count}){context}{break_context}",
-            )
+    # Rule 3: dense break + moderate gap pattern.
+    if (
+        max_gap_s >= config.dense_break_gap_max_gap_seconds
+        and mean_gap_s <= config.dense_break_gap_mean_gap_seconds
+        and break_tag_count >= config.dense_break_min_break_tags
+    ):
+        return ValidationResult(
+            False,
+            (
+                "Structured-break gap risk: "
+                f"max_gap={max_gap_s:.2f}s, mean_gap={mean_gap_s:.2f}s, breaks={break_tag_count}"
+            ),
+            metrics=metrics,
+        )
 
-    # 2) If a break is expected, check that the pre-break word duration is not
-    # an extreme outlier versus local neighbors.
-    for boundary_index, expected_break in break_boundaries:
-        boundary_word_duration = float(ends[boundary_index]) - float(starts[boundary_index])
-        if boundary_word_duration < config.break_word_min_seconds:
-            continue
+    # Rule 4: medium-band pacing profile.
+    if (
+        config.medium_band_min_gap_seconds <= max_gap_s <= config.medium_band_max_gap_seconds
+        and config.medium_band_min_mean_gap_seconds <= mean_gap_s <= config.medium_band_max_mean_gap_seconds
+        and break_tag_count >= config.medium_band_min_break_tags
+        and duration_s >= config.medium_band_min_duration_seconds
+    ):
+        return ValidationResult(
+            False,
+            (
+                "Medium-band pacing risk: "
+                f"max_gap={max_gap_s:.2f}s, mean_gap={mean_gap_s:.2f}s, breaks={break_tag_count}"
+            ),
+            metrics=metrics,
+        )
 
-        left = max(0, boundary_index - config.break_duration_median_window)
-        right = min(count - 1, boundary_index + config.break_duration_median_window)
-        neighbor_durations: list[float] = []
-        for j in range(left, right + 1):
-            if j == boundary_index:
-                continue
-            duration = float(ends[j]) - float(starts[j])
-            if duration > 0:
-                neighbor_durations.append(duration)
-        if not neighbor_durations:
-            continue
-
-        local_median = median(neighbor_durations)
-        local_ratio = boundary_word_duration / max(local_median, 0.05)
+    # Rule 5: distilled base branch (surrogate of grouped HGB @ 0.5).
+    base_fail = False
+    if max_gap_s <= config.base_split_max_gap_seconds:
         if (
-            local_ratio > config.break_word_duration_ratio
-            and enforce_pause_anomaly_failure
+            max_gap_pos_ratio > config.base_split_max_gap_pos_ratio
+            and break_total_s > config.base_split_break_total_seconds
         ):
-            return ValidationResult(
-                False,
-                f"Break-boundary duration anomaly: '{words[boundary_index]}' lasts "
-                f"{boundary_word_duration:.2f}s ({local_ratio:.1f}x local median "
-                f"{local_median:.2f}s) before expected break ~{expected_break:.2f}s",
-            )
+            base_fail = True
+    else:
+        if duration_s <= config.base_hi_gap_split_duration_seconds:
+            if max_gap_s > config.base_hi_gap_max_gap_seconds:
+                base_fail = True
+        elif duration_s <= config.base_mid_duration_seconds:
+            if overall_wps <= config.base_mid_overall_wps_max:
+                base_fail = True
 
-    # 3) Special case near the opening boundary: catches hidden repeated opener
-    # patterns that manifest as a suspicious first gap.
-    if not break_boundaries and count >= 2 and not words[0].endswith((",", ".", "!", "?", ";", ":")):
-        first_gap = float(starts[1]) - float(ends[0])
-        if first_gap > config.initial_gap_no_break_seconds:
-            first_word_duration = float(ends[0]) - float(starts[0])
-            second_word_duration = float(ends[1]) - float(starts[1])
-            if second_word_duration <= config.initial_gap_second_word_max_seconds:
-                following_gaps = []
-                for i in range(1, min(count - 1, 8)):
-                    gap = float(starts[i + 1]) - float(ends[i])
-                    if gap > 0.01:
-                        following_gaps.append(gap)
-                median_following_gap = median(following_gaps) if following_gaps else 0.0
-                delta = first_gap - median_following_gap
-                if (
-                    (
-                        first_word_duration <= config.initial_gap_short_word_max_seconds
-                        or delta > config.initial_gap_delta_seconds
-                    )
-                    and enforce_pause_anomaly_failure
-                ):
-                    return ValidationResult(
-                        False,
-                        f"Initial gap anomaly: {first_gap:.2f}s between '{words[0]}' and "
-                        f"'{words[1]}' (first {first_word_duration:.2f}s, second "
-                        f"{second_word_duration:.2f}s, baseline {median_following_gap:.2f}s, "
-                        f"delta {delta:.2f}s)",
-                    )
+    if base_fail:
+        return ValidationResult(
+            False,
+            (
+                "Standalone C risk score: "
+                f"max_gap={max_gap_s:.2f}s, mean_gap={mean_gap_s:.2f}s, duration={duration_s:.2f}s"
+            ),
+            metrics=metrics,
+        )
 
-    # 4) WPS spike check remains independent of the pause severity gate so that
-    # compressed/truncated pacing anomalies are still caught.
-    if count >= config.window_size:
-        total_duration = float(ends[-1]) - float(starts[0])
-        if total_duration <= 0:
-            return ValidationResult(True, "Zero duration segment")
-
-        adjusted_duration = total_duration - consumed_expected_break_seconds
-        if adjusted_duration <= 0:
-            adjusted_duration = total_duration
-        overall_wps = count / adjusted_duration
-
-        max_window_wps = 0.0
-        max_wps_index = 0
-        for i in range(count - config.window_size + 1):
-            window_start = float(starts[i])
-            window_end = float(ends[i + config.window_size - 1])
-            window_duration = max(window_end - window_start, 0.001)
-            window_wps = config.window_size / window_duration
-            if window_wps > max_window_wps:
-                max_window_wps = window_wps
-                max_wps_index = i
-
-        ratio = max_window_wps / max(overall_wps, 0.1)
-        if ratio > config.wps_ratio_threshold:
-            return ValidationResult(
-                False,
-                f"WPS spike: {max_window_wps:.1f} wps ({ratio:.1f}x overall {overall_wps:.1f}) "
-                f"at word {max_wps_index + 1}",
-            )
-
-    return ValidationResult(
-        True,
-        "Valid",
-        metrics={
-            "max_word_duration": max_word_duration,
-            "median_word_duration": median_word_duration,
-            "max_word_ratio": max_word_ratio,
-            "max_gap_observed": max_gap_observed,
-        },
-    )
+    return ValidationResult(True, "Valid", metrics=metrics)

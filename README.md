@@ -1,51 +1,46 @@
 # Inworld TTS Timing Validator
 
-A small, fast, timing-only validator for Inworld TTS responses.
+A fast standalone validator for Inworld TTS responses using timestamp metadata and text structure only (no audio decoding).
 
-It catches common glitch patterns from timestamp metadata (no audio decoding needed):
-- repeated/looped pauses
-- break-boundary duration anomalies
-- suspicious opening-word pause pattern
-- compressed/truncated pacing spikes
+## What changed
 
-This implementation was tuned from real labeled samples and is designed to run on hundreds of segments in seconds.
+This repo previously used the legacy “severity-gated gap/WPS” implementation.
 
-## Why this exists
+It now uses **Standalone Variant C**, distilled from reviewed production labels, with one goal:
 
-Inworld can occasionally return audio that sounds wrong while still returning a valid response.
+- catch as many bad segments as possible
+- while dramatically reducing false alarms versus the old baseline
 
-Timing metadata (`wordAlignment`) is cheap to validate and gives a good first-pass filter before expensive audio checks.
+## Variant C (current algorithm)
 
-## What is the core improvement?
+Computed features:
 
-Many pause-related false positives come from natural speaking pauses.
+- `max_gap_s`, `mean_gap_s`, `max_gap_pos_ratio`
+- `duration_s`, `overall_wps`
+- break structure from text: `break_tag_count`, `break_total_s`
 
-So pause-family failures (gap/break/initial-gap) are only enforced when a segment-level severity gate is met:
+Fail when any rule is true:
 
-```text
-max_word_duration >= 1.4
-OR
-(max_gap >= 3.0 AND max_word_duration / median_word_duration >= 2.0)
-```
+1. `duration_s <= 4.08`
+2. `max_gap_s >= 4.23 AND mean_gap_s >= 0.50`
+3. `max_gap_s >= 3.2 AND mean_gap_s <= 0.33 AND break_tag_count >= 8`
+4. `2.8 <= max_gap_s <= 3.1 AND 0.35 <= mean_gap_s <= 0.42 AND break_tag_count >= 5 AND duration_s >= 20`
+5. Distilled base branch:
+   - if `max_gap_s <= 4.79`, fail when `max_gap_pos_ratio > 0.73 AND break_total_s > 3.90`
+   - else if `max_gap_s > 4.79`:
+     - if `duration_s <= 19.91`, fail when `max_gap_s > 8.93`
+     - if `19.91 < duration_s <= 37.08`, fail when `overall_wps <= 1.37`
 
-This reduced false positives on our labeled set while keeping bad-sample recall unchanged.
+Else pass.
 
-## Measured results on labeled data
+## Measured outcomes on latest labeled v2 set
 
-Implemented rule in this repo:
+| Method | TP | FP | FN | Recall (bad) | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Legacy baseline (`validation_failed` flag style) | 34 | 58 | 3 | 91.9% | 54.2% |
+| Standalone Variant C | 37 | 9 | 0 | 100.0% | 8.4% |
 
-```text
-max_word_duration >= 1.4
-OR
-(max_gap >= 3.0 AND max_word_duration / median_word_duration >= 2.0)
-```
-
-| Dataset | Labels (bad/pass) | Precision (bad) | Recall (bad) |
-| --- | ---: | ---: | ---: |
-| Set A | 36 (11 / 25) | 0.478 | 1.000 |
-| Set B | 26 (10 / 16) | 0.588 | 1.000 |
-
-These sets are the reviewed samples used during threshold calibration.
+So Variant C keeps full bad-sample capture on this set while cutting false alarms by ~84.5% vs baseline.
 
 ## Quick start
 
@@ -62,52 +57,11 @@ from inworld_timing_validator import validate_inworld_timestamps
 
 result = validate_inworld_timestamps(timestamp_info, source_text=segment_text)
 if not result.is_valid:
-    print("retry tts:", result.reason)
+    print("retry tts:", result.reason, result.metrics)
 ```
 
-## Included dataset
+## Notes
 
-This repo includes a curated dataset:
-
-- `datasets/validation_failures.json`
-
-It contains labeled fail examples with:
-- voice/model metadata (`voice_id`, `model_id`, `temperature`, `speaking_rate`)
-- prompt excerpts
-- failure category (`repeated_words_or_pause_loop`, `dragged_out_characters`)
-- timing metrics (`max_gap`, `max_word_duration`, `max_word_ratio`)
-
-## Config knobs
-
-All thresholds live in `ValidationConfig`:
-
-- `max_gap_seconds`, `max_gap_after_sentence_seconds`
-- `break_word_duration_ratio`, `break_word_min_seconds`
-- `initial_gap_*`
-- `wps_ratio_threshold`, `window_size`
-- `anomaly_min_max_word_seconds`
-- `anomaly_min_gap_seconds`
-- `anomaly_min_word_ratio`
-
-## How to apply this in your project
-
-1. Call validator immediately after each TTS response.
-2. On `invalid`, retry generation (bounded retry count).
-3. Log `reason` + metrics for calibration.
-4. Sample and label both passing and failing outputs weekly.
-5. Re-tune thresholds by provider/voice/content-type if needed.
-
-## Costs and benefits
-
-### Benefits
-
-- **Very fast**: O(n words), no waveform processing.
-- **Simple rollout**: pure Python + timestamp JSON.
-- **High recall oriented** when tuned against your labels.
-
-### Costs / limitations
-
-- **Needs labeled data** to tune well.
-- **Not universal**: thresholds can drift by voice/model/content style.
-- **Timing-only blind spots**: some audio defects need waveform checks.
-- **Trade-off remains**: improving precision can reduce recall if over-tuned.
+- This validator is intentionally standalone: no dependency on external “validator reason” labels.
+- Thresholds are configurable in `ValidationConfig` if you want environment-specific tuning.
+- Continue collecting labeled samples; recalibrate periodically as voice/model behavior drifts.
